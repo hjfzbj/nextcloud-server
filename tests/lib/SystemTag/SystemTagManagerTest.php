@@ -11,9 +11,11 @@ namespace Test\SystemTag;
 use OC\SystemTag\SystemTagManager;
 use OC\SystemTag\SystemTagObjectMapper;
 use OCP\EventDispatcher\IEventDispatcher;
+use OCP\IAppConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
 use OCP\IUser;
+use OCP\IUserSession;
 use OCP\SystemTag\ISystemTag;
 use OCP\SystemTag\ISystemTagManager;
 use Test\TestCase;
@@ -41,6 +43,16 @@ class SystemTagManagerTest extends TestCase {
 	private $groupManager;
 
 	/**
+	 * @var IUserSession
+	 */
+	private $userSession;
+
+	/**
+	 * @var IAppConfig
+	 */
+	private $appConfig;
+
+	/**
 	 * @var IEventDispatcher
 	 */
 	private $dispatcher;
@@ -52,11 +64,15 @@ class SystemTagManagerTest extends TestCase {
 
 		$this->dispatcher = $this->createMock(IEventDispatcher::class);
 		$this->groupManager = $this->createMock(IGroupManager::class);
+		$this->userSession = $this->createMock(IUserSession::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
 
 		$this->tagManager = new SystemTagManager(
 			$this->connection,
 			$this->groupManager,
-			$this->dispatcher
+			$this->dispatcher,
+			$this->userSession,
+			$this->appConfig,
 		);
 		$this->pruneTagsTables();
 	}
@@ -534,6 +550,84 @@ class SystemTagManagerTest extends TestCase {
 		$this->tagManager->setTagGroups($tag1, ['']);
 		$this->assertEquals([], $this->tagManager->getTagGroups($tag1));
 	}
+
+	private function allowedToCreateProvider(): array {
+		return [
+			[true, null, true],
+			[true, null, false],
+			[false, true, true],
+			[false, true, false],
+			[false, false, false],
+		];
+	}
+
+	/**
+	 * @dataProvider allowedToCreateProvider
+	 */
+	public function testAllowedToCreateTag(bool $isCli, ?bool $isAdmin, bool $isRestricted): void {
+		$oldCli = \OC::$CLI;
+		\OC::$CLI = $isCli;
+
+		$user = $this->getMockBuilder(IUser::class)->getMock();
+		$user->expects($this->any())
+			->method('getUID')
+			->willReturn('test');
+		$this->userSession->expects($this->any())
+			->method('getUser')
+			->willReturn($isAdmin === null ? null : $user);
+		$this->groupManager->expects($this->any())
+			->method('isAdmin')
+			->with('test')
+			->willReturn($isAdmin);
+		$this->appConfig->expects($this->any())
+			->method('getValueBool')
+			->with('systemtags', 'only_admins_can_edit')
+			->willReturn($isRestricted);
+
+		$name = uniqid('tag_', true);
+		$tag = $this->tagManager->createTag($name, true, true);
+		$this->assertEquals($tag->getName(), $name);
+		$this->tagManager->deleteTags($tag->getId());
+
+		\OC::$CLI = $oldCli;
+	}
+
+	private function disallowedToCreateProvider(): array {
+		return [
+			[false],
+			[null],
+		];
+	}
+
+	/**
+	 * @dataProvider disallowedToCreateProvider
+	 */
+	public function testDisallowedToCreateTag(?bool $isAdmin): void {
+		$oldCli = \OC::$CLI;
+		\OC::$CLI = false;
+
+		$user = $this->getMockBuilder(IUser::class)->getMock();
+		$user->expects($this->any())
+			->method('getUID')
+			->willReturn('test');
+		$this->userSession->expects($this->any())
+			->method('getUser')
+			->willReturn($isAdmin === null ? null : $user);
+		$this->groupManager->expects($this->any())
+			->method('isAdmin')
+			->with('test')
+			->willReturn($isAdmin);
+		$this->appConfig->expects($this->any())
+			->method('getValueBool')
+			->with('systemtags', 'only_admins_can_edit')
+			->willReturn(true);
+
+		$this->expectException(\Exception::class);
+		$tag = $this->tagManager->createTag(uniqid('tag_', true), true, true);
+
+		\OC::$CLI = $oldCli;
+	}
+
 
 	/**
 	 * @param ISystemTag $tag1

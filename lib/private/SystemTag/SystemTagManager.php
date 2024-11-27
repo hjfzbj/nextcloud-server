@@ -11,13 +11,16 @@ namespace OC\SystemTag;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\EventDispatcher\IEventDispatcher;
+use OCP\IAppConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
 use OCP\IUser;
+use OCP\IUserSession;
 use OCP\SystemTag\ISystemTag;
 use OCP\SystemTag\ISystemTagManager;
 use OCP\SystemTag\ManagerEvent;
 use OCP\SystemTag\TagAlreadyExistsException;
+use OCP\SystemTag\TagEditionForbiddenException;
 use OCP\SystemTag\TagNotFoundException;
 
 /**
@@ -36,6 +39,8 @@ class SystemTagManager implements ISystemTagManager {
 		protected IDBConnection $connection,
 		protected IGroupManager $groupManager,
 		protected IEventDispatcher $dispatcher,
+		private IUserSession $userSession,
+		private IAppConfig $appConfig,
 	) {
 		$query = $this->connection->getQueryBuilder();
 		$this->selectTagQuery = $query->select('*')
@@ -145,6 +150,10 @@ class SystemTagManager implements ISystemTagManager {
 	}
 
 	public function createTag(string $tagName, bool $userVisible, bool $userAssignable): ISystemTag {
+		$user = $this->userSession->getUser();
+		if (!$this->canUserEditTag($user)) {
+			throw new TagEditionForbiddenException('Tag creation forbidden');
+		}
 		// Length of name column is 64
 		$truncatedTagName = substr($tagName, 0, 64);
 		$query = $this->connection->getQueryBuilder();
@@ -189,6 +198,11 @@ class SystemTagManager implements ISystemTagManager {
 		bool $userAssignable,
 		?string $color,
 	): void {
+		$user = $this->userSession->getUser();
+		if (!$this->canUserEditTag($user)) {
+			throw new TagEditionForbiddenException('Tag update forbidden');
+		}
+
 		try {
 			$tags = $this->getTagsByIds($tagId);
 		} catch (TagNotFoundException $e) {
@@ -319,6 +333,22 @@ class SystemTagManager implements ISystemTagManager {
 		return false;
 	}
 
+	public function canUserEditTag(?IUser $user): bool {
+		if ($user === null) {
+			// If no user given, allows only calls from CLI
+			return \OC::$CLI;
+		}
+
+		if ($this->appConfig->getValueBool('systemtags', 'only_admins_can_edit', false) === false) {
+			return true;
+		}
+
+		return $this->groupManager->isAdmin($user->getUID());
+	}
+
+	/**
+	 * {@inheritdoc}
+	 */
 	public function canUserSeeTag(ISystemTag $tag, ?IUser $user): bool {
 		// If no user, then we only show public tags
 		if (!$user && $tag->getAccessLevel() === ISystemTag::ACCESS_LEVEL_PUBLIC) {
