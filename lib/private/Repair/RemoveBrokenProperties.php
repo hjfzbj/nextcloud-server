@@ -33,13 +33,13 @@ class RemoveBrokenProperties implements IRepairStep {
 	 * @inheritdoc
 	 */
 	public function run(IOutput $output) {
-		// select all calendar transparency properties
+		// select all object properties
 		$cmd = $this->db->getQueryBuilder();
 		$cmd->select('id', 'propertyvalue')
 			->from('properties')
 			->where($cmd->expr()->eq('valuetype', $cmd->createNamedParameter('3', IQueryBuilder::PARAM_INT), IQueryBuilder::PARAM_INT));
 		$result = $cmd->executeQuery();
-		// find broken properties
+		// find broken object properties
 		$brokenIds = [];
 		while ($entry = $result->fetch()) {
 			if (!empty($entry['propertyvalue'])) {
@@ -52,7 +52,7 @@ class RemoveBrokenProperties implements IRepairStep {
 			}
 		}
 		$result->closeCursor();
-		// delete broken calendar transparency properties
+		// delete broken object properties
 		$cmd = $this->db->getQueryBuilder();
 		$cmd->delete('properties')
 			->where($cmd->expr()->in('id', $cmd->createParameter('ids'), IQueryBuilder::PARAM_STR_ARRAY));
