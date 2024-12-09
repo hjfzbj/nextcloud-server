@@ -387,6 +387,7 @@ class FailingTextToImageProvider implements \OCP\TextToImage\IProvider {
  */
 class TaskProcessingTest extends \Test\TestCase {
 	private IManager $manager;
+	private IManager $disabledTypeManager;
 	private Coordinator $coordinator;
 	private array $providers;
 	private IServerContainer $serverContainer;
@@ -442,11 +443,6 @@ class TaskProcessingTest extends \Test\TestCase {
 		$this->jobList->expects($this->any())->method('add')->willReturnCallback(function () {
 		});
 
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')
-			->with('core', 'ai.textprocessing_provider_preferences', '')
-			->willReturn('');
-
 		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 
 		$text2imageManager = new \OC\TextToImage\Manager(
@@ -476,6 +472,42 @@ class TaskProcessingTest extends \Test\TestCase {
 			\OC::$server->get(IClientService::class),
 			\OC::$server->get(IAppManager::class),
 		);
+
+
+		$taskProcessingTypeSettings = [
+			TextToText::ID => 'false',
+		];
+
+		fwrite(STDERR, print_r('1', true));
+		fwrite(STDERR, print_r($taskProcessingTypeSettings, true));
+
+		$disabledConfig = $this->createMock(IConfig::class);
+		$disabledConfig
+			->method('getAppValue')
+			->willReturnCallback(function (string $appName, string $key) use ($taskProcessingTypeSettings) {
+				if ($key === 'ai.taskprocessing_provider_preferences') {
+					return '';
+				} elseif ($key === 'ai.taskprocessing_type_preferences') {
+					return json_encode($taskProcessingTypeSettings);
+				}
+				return '';
+			});
+
+		$this->disabledTypeManager = new Manager(
+			$disabledConfig,
+			$this->coordinator,
+			$this->serverContainer,
+			\OC::$server->get(LoggerInterface::class),
+			$this->taskMapper,
+			$this->jobList,
+			$this->eventDispatcher,
+			\OC::$server->get(IAppDataFactory::class),
+			\OC::$server->get(IRootFolder::class),
+			$text2imageManager,
+			$this->userMountCache,
+			\OC::$server->get(IClientService::class),
+			\OC::$server->get(IAppManager::class),
+		);
 	}
 
 	private function getFile(string $name, string $content): \OCP\Files\File {
@@ -491,6 +523,36 @@ class TaskProcessingTest extends \Test\TestCase {
 		self::expectException(\OCP\TaskProcessing\Exception\PreConditionNotMetException::class);
 		$this->manager->scheduleTask(new Task(TextToText::ID, ['input' => 'Hello'], 'test', null));
 	}
+
+	public function testProviderShouldBeRegisteredAndTaskTypeDisabled(): void {
+		$this->registrationContext->expects($this->any())->method('getTaskProcessingProviders')->willReturn([
+			new ServiceRegistration('test', SuccessfulSyncProvider::class)
+		]);
+		$output = $this->disabledTypeManager->getAvailableTaskTypes(true);
+		fwrite(STDERR, print_r('2', true));
+		fwrite(STDERR, print_r($output, true));
+		self::assertCount(0, $this->disabledTypeManager->getAvailableTaskTypes());
+		self::assertCount(1, $this->disabledTypeManager->getAvailableTaskTypes(true));
+		// self::assertFalse($this->disabledTypeManager->hasProviders());
+		self::expectException(\OCP\TaskProcessing\Exception\PreConditionNotMetException::class);
+		$this->disabledTypeManager->scheduleTask(new Task(TextToText::ID, ['input' => 'Hello'], 'test', null));
+	}
+
+
+	public function testProviderShouldBeRegisteredAndTaskTypeDisabled2(): void {
+		$this->registrationContext->expects($this->any())->method('getTaskProcessingProviders')->willReturn([
+			new ServiceRegistration('test', SuccessfulSyncProvider::class)
+		]);
+		$output = $this->disabledTypeManager->getAvailableTaskTypes(true);
+		fwrite(STDERR, print_r('3', true));
+		fwrite(STDERR, print_r($output, true));
+		self::assertCount(0, $this->manager->getAvailableTaskTypes());
+		self::assertCount(1, $this->manager->getAvailableTaskTypes(true));
+		self::assertFalse($this->manager->hasProviders());
+		self::expectException(\OCP\TaskProcessing\Exception\PreConditionNotMetException::class);
+		$this->manager->scheduleTask(new Task(TextToText::ID, ['input' => 'Hello'], 'test', null));
+	}
+
 
 	public function testProviderShouldBeRegisteredAndTaskFailValidation(): void {
 		$this->registrationContext->expects($this->any())->method('getTaskProcessingProviders')->willReturn([

@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2019 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import { generateUrl, getRootUrl } from '@nextcloud/router'
+import { generateUrl } from '@nextcloud/router'
 import logger from '../logger.ts'
 
 export default () => {
@@ -11,8 +11,7 @@ export default () => {
 		window.addEventListener('load', async () => {
 			try {
 				const url = generateUrl('/apps/files/preview-service-worker.js', {}, { noRewrite: true })
-				const scope = getRootUrl()
-				const registration = await navigator.serviceWorker.register(url, { scope })
+				const registration = await navigator.serviceWorker.register(url, { scope: '/' })
 				logger.debug('SW registered: ', { registration })
 			} catch (error) {
 				logger.error('SW registration failed: ', { error })
