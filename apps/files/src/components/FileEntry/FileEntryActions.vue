@@ -273,11 +273,6 @@ export default defineComponent({
 			prevent: true,
 		})
 
-		useHotKey('Delete', this.onKeyDown, {
-			stop: true,
-			prevent: true,
-		})
-
 		useHotKey('s', this.onKeyDown, {
 			stop: true,
 			prevent: true,

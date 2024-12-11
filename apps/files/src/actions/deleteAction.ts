@@ -5,6 +5,7 @@
 import { Permission, Node, View, FileAction } from '@nextcloud/files'
 import { showInfo } from '@nextcloud/dialogs'
 import { translate as t } from '@nextcloud/l10n'
+import { useHotKey } from '@nextcloud/vue/dist/Composables/useHotKey.js'
 import PQueue from 'p-queue'
 
 import CloseSvg from '@mdi/svg/svg/close.svg?raw'
@@ -13,6 +14,7 @@ import TrashCanSvg from '@mdi/svg/svg/trash-can.svg?raw'
 
 import logger from '../logger.ts'
 import { askConfirmation, canDisconnectOnly, canUnshareOnly, deleteNode, displayName, isTrashbinEnabled } from './deleteUtils'
+import { executeAction } from '../utils/actionUtils.ts'
 
 const queue = new PQueue({ concurrency: 5 })
 
@@ -106,4 +108,13 @@ export const action = new FileAction({
 	},
 
 	order: 100,
+})
+
+const executeDeleteAction = function() {
+	executeAction(action)
+}
+
+useHotKey('Delete', executeDeleteAction, {
+	stop: true,
+	prevent: true,
 })

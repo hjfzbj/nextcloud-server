@@ -58,6 +58,7 @@ export const useActiveStore = function(...args) {
 		subscribe('files:node:deleted', activeStore.onDeletedNode)
 
 		activeStore._initialized = true
+		activeStore.onChangedView(navigation.active)
 
 		// Or you can react to changes of the current active view
 		navigation.addEventListener('updateActive', (event) => {
